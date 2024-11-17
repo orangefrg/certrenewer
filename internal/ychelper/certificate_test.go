@@ -155,17 +155,19 @@ func TestGetCertificate(t *testing.T) {
 }
 func TestRenewCertificates(t *testing.T) {
 	tests := []struct {
-		name          string
-		folderId      string
-		certs         []CertConfig
-		certList      *certmgr.ListCertificatesResponse
-		certInfo      *certmgr.Certificate
-		certContents  *certmgr.GetCertificateContentResponse
-		listErr       error
-		getErr        error
-		contentGetErr error
-		expiryDateErr error
-		expectedLogs  []string
+		name               string
+		folderId           string
+		certs              []CertConfig
+		certList           *certmgr.ListCertificatesResponse
+		certInfo           *certmgr.Certificate
+		certContents       *certmgr.GetCertificateContentResponse
+		listErr            error
+		getErr             error
+		contentGetErr      error
+		expiryDateErr      error
+		expectedLogs       []string
+		expectedTotal      int
+		expectedSuccessful int
 	}{
 		{
 			name:     "Certificate not found",
@@ -180,6 +182,8 @@ func TestRenewCertificates(t *testing.T) {
 				"Updating cert1 (1/1)...",
 				"could not find certificate of given name",
 			},
+			expectedTotal:      1,
+			expectedSuccessful: 0,
 		},
 		{
 			name:     "Certificate status not issued",
@@ -199,6 +203,8 @@ func TestRenewCertificates(t *testing.T) {
 				"Updating cert1 (1/1)...",
 				"could not renew certificate: abnormal cert status 4",
 			},
+			expectedTotal:      1,
+			expectedSuccessful: 0,
 		},
 		{
 			name:     "Certificate does not need update",
@@ -223,6 +229,8 @@ func TestRenewCertificates(t *testing.T) {
 				"Updating cert1 (1/1)...",
 				"Certificate cert1 does not need to be updated",
 			},
+			expectedTotal:      1,
+			expectedSuccessful: 1,
 		},
 		{
 			name:     "Certificate needs update",
@@ -249,6 +257,8 @@ func TestRenewCertificates(t *testing.T) {
 				"Restarting services...",
 				"Restarting service1",
 			},
+			expectedTotal:      1,
+			expectedSuccessful: 1,
 		},
 	}
 
@@ -291,7 +301,7 @@ func TestRenewCertificates(t *testing.T) {
 			var logs []string
 			log.SetOutput(&logWriter{logs: &logs})
 
-			RenewCertificates(tt.folderId, cm, tt.certs)
+			total, success := RenewCertificates(tt.folderId, cm, tt.certs)
 
 			// Check logs
 			for _, expectedLog := range tt.expectedLogs {
@@ -304,6 +314,9 @@ func TestRenewCertificates(t *testing.T) {
 				}
 				assert.True(t, found, "expected log not found: %s\nLogs: ", expectedLog, logs)
 			}
+			// Check output
+			assert.Equal(t, tt.expectedTotal, total)
+			assert.Equal(t, tt.expectedSuccessful, success)
 		})
 	}
 }

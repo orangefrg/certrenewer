@@ -83,11 +83,16 @@ func GetCertificate(folderId string, certName string, dueDate time.Time, cm *Cer
 	return true, certContents.CertificateChain, certContents.PrivateKey, nil
 }
 
-func RenewCertificates(folderId string, cm *CertificateManager, certs []CertConfig) {
-	allServicesMap := make(map[string]struct{})
+func RenewCertificates(folderId string, cm *CertificateManager, certs []CertConfig) (total int, success int) {
+	allServicesMap := make(map[string]int)
 	for _, singleCert := range certs {
-		allServicesMap[singleCert.ServiceName] = struct{}{}
+		_, ok := allServicesMap[singleCert.ServiceName]
+		if !ok {
+			allServicesMap[singleCert.ServiceName] = 0
+		}
+		allServicesMap[singleCert.ServiceName]++
 	}
+	total = len(certs)
 	for index, singleCert := range certs {
 		log.Printf("Updating %s (%d/%d)...", singleCert.Name, index+1, len(certs))
 		expiryDate, err := GetCertificateExpiryDate(singleCert.ChainPath)
@@ -98,9 +103,11 @@ func RenewCertificates(folderId string, cm *CertificateManager, certs []CertConf
 		needsUpdate, chain, privKey, err := GetCertificate(folderId, singleCert.Name, expiryDate, cm)
 		if err != nil {
 			log.Printf("Could not update cert %s: %s", singleCert.Name, err.Error())
+
 			continue
 		} else if !needsUpdate {
 			log.Printf("Certificate %s does not need to be updated", singleCert.Name)
+
 			continue
 		}
 		fullChain := ""
@@ -110,6 +117,7 @@ func RenewCertificates(folderId string, cm *CertificateManager, certs []CertConf
 		err = filehelper.WriteWithBackup(singleCert.ChainPath, []byte(fullChain), 0644)
 		if err != nil {
 			log.Printf("Could not write cert %s chain to file %s: %s", singleCert.Name, singleCert.ChainPath, err.Error())
+
 			continue
 		}
 		err = filehelper.WriteWithBackup(singleCert.PrivKeyPath, []byte(privKey), 0600)
@@ -127,7 +135,9 @@ func RenewCertificates(folderId string, cm *CertificateManager, certs []CertConf
 			log.Printf("Could not restart %s: %s", key, err.Error())
 			continue
 		}
+		success += allServicesMap[key]
 	}
+	return
 }
 
 var GetCertificateExpiryDate = func(certPath string) (time.Time, error) {
