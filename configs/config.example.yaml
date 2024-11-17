@@ -1,0 +1,6 @@
+renewalPeriod: 24h
+certs:
+  - name: cert_name
+    privKey: 'path/to/privKey'
+    chain: 'path/to/chain'
+    service: 'service-to-restart'
