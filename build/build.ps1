@@ -1,16 +1,7 @@
-if ((Get-Item -Path ".").BaseName -ne "build") {
-    Write-Error "This script must be run from the 'build' directory."
-    exit 1
-}
+$rootDir = (Get-Item -Path "./").BaseName
 
-$rootDir = (Get-Item -Path "../").BaseName
-
-$cmdDir = "../cmd"
+$cmdDir = "./cmd"
 $binDir = "../bin"
-
-if (-not (Test-Path -Path $binDir)) {
-    New-Item -ItemType Directory -Path $binDir | Out-Null
-}
 
 if (-not (Test-Path -Path $cmdDir)) {
     Write-Error "cmd/ directory does not exist. Please check the project structure."
@@ -19,7 +10,13 @@ if (-not (Test-Path -Path $cmdDir)) {
 
 Push-Location $cmdDir
 
+
 try {
+    
+    if (-not (Test-Path -Path $binDir)) {
+        New-Item -ItemType Directory -Path $binDir | Out-Null
+    }
+
     # Build for Windows
     $env:GOOS = "windows"
     $env:GOARCH = "amd64"
