@@ -12,7 +12,7 @@ Push-Location $cmdDir
 
 
 try {
-    
+
     if (-not (Test-Path -Path $binDir)) {
         New-Item -ItemType Directory -Path $binDir | Out-Null
     }
