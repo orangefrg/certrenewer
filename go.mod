@@ -3,6 +3,7 @@ module github.com/orangefrg/certrenewer
 go 1.23.3
 
 require (
+	github.com/sirupsen/logrus v1.9.3
 	github.com/stretchr/testify v1.9.0
 	github.com/yandex-cloud/go-genproto v0.0.0-20241114125552-204702d61ed0
 	github.com/yandex-cloud/go-sdk v0.0.0-20241114131935-2a8bbd3c67f1
@@ -18,6 +19,7 @@ require (
 	github.com/hashicorp/errwrap v1.0.0 // indirect
 	github.com/hashicorp/go-multierror v1.1.1 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
+	github.com/stretchr/objx v0.5.2 // indirect
 	golang.org/x/net v0.28.0 // indirect
 	golang.org/x/sys v0.24.0 // indirect
 	golang.org/x/text v0.17.0 // indirect

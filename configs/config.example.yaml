@@ -1,5 +1,6 @@
 renewalPeriod: 24h
 heartBeatPeriod: 1h
+yclogging-group: 'logging-group'
 certs:
   - name: cert_name
     privKey: 'path/to/privKey'

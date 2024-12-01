@@ -1,7 +1,5 @@
 package main
 
-// TODO: Logging to Cloud Logging
-
 import (
 	"fmt"
 	"log"
@@ -9,7 +7,9 @@ import (
 	"time"
 
 	"github.com/orangefrg/certrenewer/internal/filehelper"
+	"github.com/orangefrg/certrenewer/internal/yc_logging"
 	"github.com/orangefrg/certrenewer/internal/ychelper"
+	"github.com/sirupsen/logrus"
 	"gopkg.in/yaml.v2"
 )
 
@@ -17,6 +17,7 @@ type MainConfig struct {
 	RenewalPeriod   filehelper.Duration   `yaml:"renewalPeriod"`
 	HeartBeatPeriod filehelper.Duration   `yaml:"heartBeatPeriod"`
 	Certs           []ychelper.CertConfig `yaml:"certs"`
+	LogGroup        string                `yaml:"yclogging-group"`
 }
 
 func LoadConfig(cfgPath string) (*MainConfig, error) {
@@ -53,6 +54,9 @@ func LoadConfig(cfgPath string) (*MainConfig, error) {
 			return nil, fmt.Errorf("service is not set for cert %d", index)
 		}
 	}
+	if cfg.LogGroup == "" {
+		cfg.LogGroup = "default"
+	}
 	return &cfg, nil
 }
 
@@ -81,6 +85,11 @@ func RenewerWorker(cfg *MainConfig) error {
 }
 
 func main() {
+	logrus.SetFormatter(&logrus.TextFormatter{
+		FullTimestamp: true,
+	})
+	logrus.SetOutput(os.Stdout)
+
 	log.Println("Starting")
 	if len(os.Args) < 2 {
 		log.Fatalln("Expecting cfg file path as argument")
@@ -91,6 +100,18 @@ func main() {
 	if err != nil {
 		log.Fatal(fmt.Errorf("could not load config: %w", err))
 	}
+
+	ycmeta, err := ychelper.GetMeta()
+	if err != nil {
+		logrus.Fatal(fmt.Errorf("could not get instance metadata: %w", err))
+	}
+
+	hook, err := yc_logging.NewYandexCloudHook(cfg.LogGroup, ycmeta.Vendor.FolderId)
+	if err != nil {
+		logrus.Fatalf("could not initialize Yandex Cloud hook: %v", err)
+	}
+	logrus.AddHook(hook)
+
 	stop := make(chan struct{})
 	duration := cfg.RenewalPeriod.Duration
 	ticker := time.NewTicker(duration)
