@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/orangefrg/certrenewer/internal/ychelper"
 	"github.com/sirupsen/logrus"
 	yclog "github.com/yandex-cloud/go-genproto/yandex/cloud/logging/v1"
 	ycsdk "github.com/yandex-cloud/go-sdk"
@@ -18,12 +17,8 @@ type YandexCloudHook struct {
 	LogGroup string
 }
 
-func NewYandexCloudHook(logGroupName string, folderId string) (*YandexCloudHook, error) {
+func NewYandexCloudHook(sdk *ycsdk.SDK, logGroupName string, folderId string) (*YandexCloudHook, error) {
 	ctx := context.Background()
-	sdk, err := ychelper.MakeSDKForInstanceSA()
-	if err != nil {
-		return nil, fmt.Errorf("could not initialize SDK: %w", err)
-	}
 	logResp, err := sdk.Logging().LogGroup().List(context.Background(), &yclog.ListLogGroupsRequest{
 		FolderId: folderId,
 		Filter:   fmt.Sprintf("name=%s", logGroupName),

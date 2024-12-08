@@ -1,8 +1,9 @@
 package main
 
+// TODO: Tests for logging
+
 import (
 	"fmt"
-	"log"
 	"os"
 	"time"
 
@@ -10,6 +11,7 @@ import (
 	"github.com/orangefrg/certrenewer/internal/yc_logging"
 	"github.com/orangefrg/certrenewer/internal/ychelper"
 	"github.com/sirupsen/logrus"
+	ycsdk "github.com/yandex-cloud/go-sdk"
 	"gopkg.in/yaml.v2"
 )
 
@@ -35,7 +37,7 @@ func LoadConfig(cfgPath string) (*MainConfig, error) {
 	}
 	if cfg.HeartBeatPeriod.Duration == 0 {
 		cfg.HeartBeatPeriod.Duration = cfg.RenewalPeriod.Duration / 10
-		log.Println("Heartbeat period is not set, using 1/10 of renewal period")
+		logrus.Info("Heartbeat period is not set, using 1/10 of renewal period")
 	}
 	if len(cfg.Certs) == 0 {
 		return nil, fmt.Errorf("no certificates in config")
@@ -60,17 +62,12 @@ func LoadConfig(cfgPath string) (*MainConfig, error) {
 	return &cfg, nil
 }
 
-func HeartbeatWorker(cfg *MainConfig) {
-	log.Println("Heartbeat ok")
+func HeartbeatWorker() {
+	logrus.Info("Heartbeat ok")
 }
 
-func RenewerWorker(cfg *MainConfig) error {
-	log.Println("Initializing SDK")
-	sdk, err := ychelper.MakeSDKForInstanceSA()
-	if err != nil {
-		return fmt.Errorf("could not initialize SDK: %w", err)
-	}
-	log.Println("Getting VM info")
+func RenewerWorker(cfg *MainConfig, sdk *ycsdk.SDK) error {
+	logrus.Info("Getting VM info")
 	vminfo, err := ychelper.GetMeta()
 	if err != nil {
 		return fmt.Errorf("could not get VM info: %w", err)
@@ -80,7 +77,7 @@ func RenewerWorker(cfg *MainConfig) error {
 		CertificateContent: sdk.CertificatesData().CertificateContent(),
 	}
 	ychelper.RenewCertificates(vminfo.Vendor.FolderId, cm, cfg.Certs)
-	log.Println("Done!")
+	logrus.Info("Done!")
 	return nil
 }
 
@@ -90,23 +87,28 @@ func main() {
 	})
 	logrus.SetOutput(os.Stdout)
 
-	log.Println("Starting")
+	logrus.Info("Starting")
 	if len(os.Args) < 2 {
-		log.Fatalln("Expecting cfg file path as argument")
+		logrus.Fatal("Expecting cfg file path as argument")
 	}
-	log.Println("Loading config")
+	logrus.Info("Loading config")
 	cfgPath := os.Args[1]
 	cfg, err := LoadConfig(cfgPath)
 	if err != nil {
-		log.Fatal(fmt.Errorf("could not load config: %w", err))
+		logrus.Fatal(fmt.Errorf("could not load config: %w", err))
 	}
 
 	ycmeta, err := ychelper.GetMeta()
 	if err != nil {
 		logrus.Fatal(fmt.Errorf("could not get instance metadata: %w", err))
 	}
+	logrus.Info("Initializing SDK")
 
-	hook, err := yc_logging.NewYandexCloudHook(cfg.LogGroup, ycmeta.Vendor.FolderId)
+	sdk, err := ychelper.MakeSDKForInstanceSA()
+	if err != nil {
+		logrus.Fatal(fmt.Errorf("could not initialize SDK: %w", err))
+	}
+	hook, err := yc_logging.NewYandexCloudHook(sdk, cfg.LogGroup, ycmeta.Vendor.FolderId)
 	if err != nil {
 		logrus.Fatalf("could not initialize Yandex Cloud hook: %v", err)
 	}
@@ -115,6 +117,7 @@ func main() {
 	stop := make(chan struct{})
 	duration := cfg.RenewalPeriod.Duration
 	ticker := time.NewTicker(duration)
+	counter := 0
 	defer func() {
 		ticker.Stop()
 		close(stop)
@@ -122,12 +125,17 @@ func main() {
 	for {
 		select {
 		case <-ticker.C:
-			err := RenewerWorker(cfg)
-			if err != nil {
-				log.Printf("Error during renewal: %v", err)
+			counter++
+			if counter >= 9 {
+				err := RenewerWorker(cfg, sdk)
+				if err != nil {
+					logrus.Warnf("Error during renewal: %v", err)
+				}
+			} else {
+				HeartbeatWorker()
 			}
 		case <-stop:
-			log.Println("Stopping")
+			logrus.Info("Stopping")
 			return
 		}
 

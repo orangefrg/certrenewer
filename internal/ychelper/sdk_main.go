@@ -7,7 +7,9 @@ import (
 	ycsdk "github.com/yandex-cloud/go-sdk"
 )
 
-func MakeSDKForInstanceSA() (*ycsdk.SDK, error) {
+var MakeSDKForInstanceSA = makeSDKForInstanceSA
+
+func makeSDKForInstanceSA() (*ycsdk.SDK, error) {
 	sdk, err := ycsdk.Build(context.Background(), ycsdk.Config{
 		Credentials: ycsdk.InstanceServiceAccount(),
 	})

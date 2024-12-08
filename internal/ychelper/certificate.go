@@ -6,11 +6,12 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
-	"log"
 	"os"
+	"sync"
 	"time"
 
 	"github.com/orangefrg/certrenewer/internal/filehelper"
+	"github.com/sirupsen/logrus"
 	certmgr "github.com/yandex-cloud/go-genproto/yandex/cloud/certificatemanager/v1"
 	"google.golang.org/grpc"
 )
@@ -93,46 +94,50 @@ func RenewCertificates(folderId string, cm *CertificateManager, certs []CertConf
 		allServicesMap[singleCert.ServiceName]++
 	}
 	total = len(certs)
+	var wg sync.WaitGroup
 	for index, singleCert := range certs {
-		log.Printf("Updating %s (%d/%d)...", singleCert.Name, index+1, len(certs))
-		expiryDate, err := GetCertificateExpiryDate(singleCert.ChainPath)
-		if err != nil {
-			log.Printf("Could not get cert %s expiry date: %s, forcing update", singleCert.Name, err.Error())
-			expiryDate = time.Time{}
-		}
-		needsUpdate, chain, privKey, err := GetCertificate(folderId, singleCert.Name, expiryDate, cm)
-		if err != nil {
-			log.Printf("Could not update cert %s: %s", singleCert.Name, err.Error())
-
-			continue
-		} else if !needsUpdate {
-			log.Printf("Certificate %s does not need to be updated", singleCert.Name)
-
-			continue
-		}
-		fullChain := ""
-		for _, chainPart := range chain {
-			fullChain += chainPart + "\n"
-		}
-		err = filehelper.WriteWithBackup(singleCert.ChainPath, []byte(fullChain), 0644)
-		if err != nil {
-			log.Printf("Could not write cert %s chain to file %s: %s", singleCert.Name, singleCert.ChainPath, err.Error())
-
-			continue
-		}
-		err = filehelper.WriteWithBackup(singleCert.PrivKeyPath, []byte(privKey), 0600)
-		if err != nil {
-			log.Printf("Could not write cert %s private key to file %s: %s", singleCert.Name, singleCert.PrivKeyPath, err.Error())
-			continue
-		}
-		log.Printf("Successfully written certificate %s", singleCert.Name)
+		wg.Add(1)
+		defer wg.Done()
+		go func() {
+			logrus.Infof("Updating %s (%d/%d)...", singleCert.Name, index+1, len(certs))
+			expiryDate, err := GetCertificateExpiryDate(singleCert.ChainPath)
+			if err != nil {
+				logrus.Infof("Could not get cert %s expiry date: %s, forcing update", singleCert.Name, err.Error())
+				expiryDate = time.Time{}
+			}
+			needsUpdate, chain, privKey, err := GetCertificate(folderId, singleCert.Name, expiryDate, cm)
+			if err != nil {
+				logrus.Infof("Could not update cert %s: %s", singleCert.Name, err.Error())
+				return
+			} else if !needsUpdate {
+				logrus.Infof("Certificate %s does not need to be updated", singleCert.Name)
+				return
+			}
+			fullChain := ""
+			for _, chainPart := range chain {
+				fullChain += chainPart + "\n"
+			}
+			err = filehelper.WriteWithBackup(singleCert.ChainPath, []byte(fullChain), 0644)
+			if err != nil {
+				logrus.Infof("Could not write cert %s chain to file %s: %s", singleCert.Name, singleCert.ChainPath, err.Error())
+				return
+			}
+			err = filehelper.WriteWithBackup(singleCert.PrivKeyPath, []byte(privKey), 0600)
+			if err != nil {
+				logrus.Infof("Could not write cert %s private key to file %s: %s", singleCert.Name, singleCert.PrivKeyPath, err.Error())
+				return
+			}
+			logrus.Infof("Successfully written certificate %s", singleCert.Name)
+		}()
 	}
-	log.Println("Restarting services...")
+	wg.Wait()
+	logrus.Info("All certificates updated")
+	logrus.Info("Restarting services...")
 	for key := range allServicesMap {
-		log.Printf("Restarting %s", key)
+		logrus.Infof("Restarting %s", key)
 		err := filehelper.ServiceRestart(key)
 		if err != nil {
-			log.Printf("Could not restart %s: %s", key, err.Error())
+			logrus.Infof("Could not restart %s: %s", key, err.Error())
 			continue
 		}
 		success += allServicesMap[key]
